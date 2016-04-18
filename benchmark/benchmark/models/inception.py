@@ -87,9 +87,14 @@ def inference(inputs,
   # end_points will collect relevant activations for external use, for example
   # summaries or losses.
   end_points = {}
+  batch_norm_params = {
+      # Decay for the batch_norm moving averages.
+      'decay': 0.9997,
+      # epsilon to prevent 0s in variance.
+      'epsilon': 0.001,
+  }
   with tf.op_scope([inputs], scope, 'inception_v3'):
-    with scopes.arg_scope([ops.conv2d, ops.fc, ops.batch_norm, ops.dropout],
-                          is_training=is_training):
+    with scopes.arg_scope([ops.conv2d], batch_norm_params=batch_norm_params):
       with scopes.arg_scope([ops.conv2d, ops.max_pool, ops.avg_pool],
                             stride=1, padding='VALID'):
         # 299 x 299 x 3
