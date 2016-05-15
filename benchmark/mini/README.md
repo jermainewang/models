@@ -1,9 +1,9 @@
-# Mini-benchmark for Tensorflow
+## Mini-benchmark for Tensorflow
 
-Typical usage:
+### Typical usage:
 python run_mini.py --num_workers=WORKER_COUNT --level=LEVEL_COUNT --mode=MODEL_NAME --weight_size=WEIGHT_SIZE --batch_size=BATCH_SIZE --num_batch=LOOP_COUNT
 
-Mode list:
+### Mode list:
 1. Fully connected FF, single GPU (WORKER_COUNT = 1, mode=fc_data_ff)
 2. Fully connected FF, multiple GPU, data parallelism  (WORKER_COUNT > 1, mode=fc_data_ff)
 3. Fully connected FF, multiple GPU, model parallelism  (WORKER_COUNT > 1, mode=fc_model_ff)
