@@ -33,6 +33,8 @@ flags.DEFINE_integer('img_w', 128, 'Image width')
 flags.DEFINE_integer('img_d', 3, 'Image depth')
 flags.DEFINE_integer('full_trace', 0, 'Full trace')
 flags.DEFINE_integer('no_assign', 0, 'No tf.assign')
+flags.DEFINE_float('shared_ratio', 0.0009765625, 'Ratio of shared parameters')
+flags.DEFINE_integer('phy_blocks', 1, 'Block count for phy')
 
 # some constants
 TOWER_NAME = 'MODEL_TOWER'
