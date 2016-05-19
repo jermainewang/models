@@ -20,6 +20,7 @@ FLAGS = tf.app.flags.FLAGS
 # tf.app.flags.DEFINE_string('model', 'alexnet', """The model to benchmark.""")
 
 flags = tf.app.flags
+flags.DEFINE_string('log_dir', None, 'Log dir')
 flags.DEFINE_integer('num_workers', 0, 'Number of workers to run')
 flags.DEFINE_integer('worker_index', 0, 'The index of this worker')
 flags.DEFINE_string('node_name', None, 'ps or worker')
@@ -82,9 +83,9 @@ def time_tensorflow_run(session, target, info_string):
         run_options = config_pb2.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = config_pb2.RunMetadata()
         merged = tf.merge_all_summaries()
-        train_writer = tf.train.SummaryWriter('/tmp/fegin/run_mini/train',
+        train_writer = tf.train.SummaryWriter(FLAGS.log_dir + '/train',
                                               session.graph)
-        test_writer = tf.train.SummaryWriter('/tmp/fegin/run_mini/test')
+        test_writer = tf.train.SummaryWriter(FLAGS.log_dir + '/test')
     else:
         run_options = None
         run_metadata = None
