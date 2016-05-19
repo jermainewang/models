@@ -15,13 +15,13 @@ python run_mini.py --num_workers=WORKER_COUNT --level=LEVEL_COUNT --mode=MODEL_N
 9.  Fully connected, multiple GPU, manual BP, model parallelism (WORKER_COUNT > 1, MODEL_NAME = fc_model_manual)
 10. A model to simulate physics usage.  (MODEL_NAME = fc_phy, --phy_blocks=2(or more) --shared_ratio=0.8 (depend on the usage))
 
-### Log (Tensorboard):
-## Usage
+## Log (Tensorboard):
+### Usage
 1. Add these two parameters : --full_trace=1 --log_dir="YourCustomizedDirectory"
 2. After execution, change to the tensorflow directory.
 3. python tensorflow/tensorboard/tensorboard.py  --logdir="YourCustomizedDirectory"
 
-## Source Code
+### Source Code
 Add following code before session.run().
 ```
 merged = tf.merge_all_summaries()
@@ -30,8 +30,8 @@ train_writer = tf.train.SummaryWriter(FLAGS.log_dir + '/train',
 test_writer = tf.train.SummaryWriter(FLAGS.log_dir + '/test')
 ```
 
-### Trace
-## Usage
+## Trace
+### Usage
 1. Add the parameter : --full_trace=1
 2. After execution, there will be a trace file, full_trace.ctf, in the execution directory.
 3. Download full_trace.ctf to your personal computer.
@@ -39,7 +39,7 @@ test_writer = tf.train.SummaryWriter(FLAGS.log_dir + '/test')
 5. catapult/tracing/bin/trace2html full_trace.ctf --output=my_trace.html
 6. open my_trace.html
 
-## Source Code
+### Source Code
 Before session.run()
 ```
     from tensorflow.core.protobuf import config_pb2
