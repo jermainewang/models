@@ -1,6 +1,6 @@
 ## Mini-benchmark for Tensorflow
 
-### Typical usage:
+### Usage:
 python run_mini.py --num_workers=WORKER_COUNT --level=LEVEL_COUNT --mode=MODEL_NAME --weight_size=WEIGHT_SIZE --batch_size=BATCH_SIZE --num_batch=LOOP_COUNT
 
 ### Mode list:
