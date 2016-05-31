@@ -22,70 +22,68 @@ tf.app.flags.DEFINE_integer('hidden_size', 4096, """Hidden layer size.""")
 tf.app.flags.DEFINE_integer('num_batches', 100, """Number of batches to run.""")
 tf.app.flags.DEFINE_integer('num_gpus', 1, """Number of gpus to run.""")
 tf.app.flags.DEFINE_integer('num_layers', 10, """Number of hidden layers""")
+tf.app.flags.DEFINE_integer('num_cuts', 4, """Number of cuts in the batch to pipeline""")
 tf.app.flags.DEFINE_bool('enable_trace', False, 'Enable trace')
 
 def get_run_op():
   # Create an optimizer that performs gradient descent.
   #opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
-  slice_size = FLAGS.hidden_size / FLAGS.num_gpus
-  print("Slice size: {}".format(slice_size))
-  data = []
-  for i in xrange(FLAGS.num_gpus):
-    with tf.device('/gpu:%d' % i):
-      data.append(tf.get_variable(
-          name = 'data%d' % i,
-          shape=[FLAGS.batch_size, slice_size],
-          trainable=False))
-  # weights
-  w = []
+  slice_size = FLAGS.batch_size / FLAGS.num_cuts
+  print('Slice size:{}'.format(slice_size))
+  data = None
+  label = None
+  last_fc = [tf.no_op()]
+  with tf.device('/gpu:0'):
+    data = tf.get_variable(
+        name = 'data',
+        shape=[slice_size, FLAGS.hidden_size],
+        trainable=False)
+    '''
+    label = tf.get_variable(
+        name = 'label',
+        shape = [slice_size, FLAGS.hidden_size],
+        trainable=False))
+    with tf.variable_scope('fc_in'):
+      weight_in = tf.zeros([1000, FLAGS.hidden_size])
+      for k in xrange(FLAGS.num_cuts):
+        with tf.control_dependencies([last_fc[-1]]):
+            last_fc.append(tf.matmul(data[k+1], weight_in))
+    '''
+  for i in xrange(FLAGS.num_cuts):
+    last_fc.append(data)
   for i in xrange(FLAGS.num_layers):
-    w.append([])
-    for j in xrange(FLAGS.num_gpus):
-      with tf.device('/gpu:%d' % j):
-        with tf.variable_scope('fc%d' % i):
-          w[i].append(tf.get_variable(
-              name='w%d' % j,
-              shape=[slice_size, FLAGS.hidden_size],
-              trainable=True))
-  # ff
-  fwd = []
-  last = data
-  for i in xrange(FLAGS.num_layers):
-    fwd.append(last)
-    tmp = []
-    for j in xrange(FLAGS.num_gpus):
-      with tf.device('/gpu:%d' % j):
-        # matmult
-        y = tf.matmul(last[j], w[i][j])
-        # split
-        tmp.append(tf.split(split_dim=1, num_split=FLAGS.num_gpus, value=y))
-    # reduce
-    red = []
-    for j in xrange(FLAGS.num_gpus):
-      with tf.device('/gpu:%d' % j):
-        red.append(tf.accumulate_n([s[j] for s in tmp]))
-    last = red
-  # bp
-  targets = []
-  for i in reversed(xrange(FLAGS.num_layers)):
-    # convert col -> rep
-    tmp = []
-    for j in xrange(FLAGS.num_gpus):
-      with tf.device('/gpu:%d' % j):
-        tmp.append(tf.concat(concat_dim=1, values=last))
-    last = []
-    for j in xrange(FLAGS.num_gpus):
-      with tf.device('/gpu:%d' % j):
-        # matmult: bp
-        dy = tf.matmul(tmp[j], tf.transpose(w[i][j]))
-        last.append(dy)
-        # matmult: grad
-        dw = tf.matmul(tf.transpose(fwd[i][j]), tmp[j])
-        # update
-        targets.append(dw)
-  with tf.control_dependencies(targets):
-    train_op = tf.no_op()
+    dev = '/gpu:%d' % (i * FLAGS.num_gpus / FLAGS.num_layers)
+    with tf.device(dev), scopes.arg_scope([variables.variable], device=dev):
+      tmp_fc = [tf.no_op()]
+      with tf.variable_scope('fc%d' % i):
+        w = tf.get_variable(
+            name='w',
+            shape=[FLAGS.hidden_size, FLAGS.hidden_size],
+            trainable=True)
+        for k in xrange(FLAGS.num_cuts):
+          with tf.control_dependencies([tmp_fc[-1]]):
+            tmp_fc.append(tf.matmul(last_fc[k+1], w))
+      last_fc = tmp_fc
+      if i == FLAGS.num_layers - 1:
+        with tf.control_dependencies(last_fc):
+          train_op = tf.no_op()
+  '''
+  with tf.device('/gpu:%d' % (FLAGS.num_gpus - 1)):
+    tmp_fc = [tf.no_op()]
+    with tf.variable_scope('fc_out'):
+      weight_out = tf.zeros([FLAGS.hidden_size, 1000])
+      for k in xrange(FLAGS.num_cuts):
+        with tf.control_dependencies([tmp_fc[-1]]):
+          tmp_fc.append(tf.matmul(last_fc[k+1], weight_out))
+    last_fc = tmp_fc
+  loss = tf.nn_softmax_cross_entropy_with_logits(last_fc, labels, name='xentropy')
+  grads = opt.compute_gradients(loss)
+  apply_gradient_op = opt.apply_gradients(grads)
+
+  train_op = tf.group(apply_gradient_op)
+  '''
   init_op = tf.initialize_all_variables()
+
   return init_op, train_op
 
 def time_tensorflow_run(session, target, info_string):
@@ -98,7 +96,10 @@ def time_tensorflow_run(session, target, info_string):
     if FLAGS.enable_trace and i == num_steps_burn_in - 1:
       run_options = config_pb2.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
       run_metadata = config_pb2.RunMetadata()
+      merged = tf.merge_all_summaries()
+      writer = tf.train.SummaryWriter('/home/minjie/tmp/pipeline', session.graph)
 
+    # Run session
     start_time = time.time()
     _ = session.run(target, options=run_options, run_metadata=run_metadata)
     duration = time.time() - start_time
@@ -125,14 +126,11 @@ def main(_):
   init_op, train_op = get_run_op()
   # create session
   sess = tf.Session()
-  # Run session
   # init variables
   print('Initialize Variables')
   sess.run(init_op)
   print('Initialize Done')
   # run
-  merged = tf.merge_all_summaries()
-  writer = tf.train.SummaryWriter('/home/minjie/tmp/modelpar', sess.graph)
   time_tensorflow_run(sess, train_op, 'Training')
 
 if __name__ == '__main__':
