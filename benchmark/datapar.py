@@ -72,12 +72,15 @@ def get_run_op():
   for i in xrange(FLAGS.num_gpus):
     with tf.device('/gpu:%d' % i), tf.name_scope('tower%d' % i):
       tower_grads.append(list(reversed(fwd_bwd(i))))
-  # accumulation
   targets = []
-  for i in xrange(FLAGS.num_layers):
-    with tf.device('/gpu:%d' % (i % FLAGS.num_gpus)):
-      with tf.name_scope('grad_accum%d' % i):
-        targets.append(tf.accumulate_n([t[i] for t in tower_grads]))
+  if FLAGS.num_gpus > 1:
+    # accumulation
+    for i in xrange(FLAGS.num_layers):
+      with tf.device('/gpu:%d' % (i % FLAGS.num_gpus)):
+        with tf.name_scope('grad_accum%d' % i):
+          targets.append(tf.accumulate_n([t[i] for t in tower_grads]))
+  else:
+    targets = tower_grads[0]
   with tf.control_dependencies(targets):
     train_op = tf.no_op()
   init_op = tf.initialize_all_variables()

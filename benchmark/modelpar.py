@@ -15,7 +15,7 @@ import benchmark.ops as ops
 import benchmark.scopes as scopes
 import benchmark.losses as losses
 
-log_dir = os.path(os.environ['HOME'], 'tmp', 'modelpar')
+log_dir = os.path.join(os.environ['HOME'], 'tmp', 'modelpar')
 
 FLAGS = tf.app.flags.FLAGS
 
