@@ -28,14 +28,14 @@ def fake_data(batch_size, num_classes):
 def inference(data, num_classes, scope):
   with tf.op_scope([data], scope):
     last = data
-    for i in range(FLAGS.num_layers - 1):
+    for i in range(FLAGS.num_layers):
       with tf.variable_scope('fc%d' % i):
         w = tf.get_variable(
             name="w",
             shape=[FLAGS.layer_size, FLAGS.layer_size],
             trainable=True)
         last = tf.matmul(last, w)
-    with tf.variable_scope('fc%d' % (FLAGS.num_layers - 1)):
+    with tf.variable_scope('fc_o'):
       w = tf.get_variable(
           name="w",
           shape=[FLAGS.layer_size, num_classes],

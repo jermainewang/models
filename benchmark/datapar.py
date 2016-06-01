@@ -15,7 +15,7 @@ import benchmark.ops as ops
 import benchmark.scopes as scopes
 import benchmark.losses as losses
 
-log_dir = os.path(os.environ['HOME'], 'tmp', 'modelpar')
+log_dir = os.path.join(os.environ['HOME'], 'tmp', 'modelpar')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -29,73 +29,55 @@ tf.app.flags.DEFINE_bool('enable_trace', False, 'Enable trace')
 def get_run_op():
   # Create an optimizer that performs gradient descent.
   #opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
-  slice_size = FLAGS.hidden_size / FLAGS.num_gpus
+  slice_size = FLAGS.batch_size / FLAGS.num_gpus
   print("Slice size: {}".format(slice_size))
   data = []
   for i in xrange(FLAGS.num_gpus):
     with tf.device('/gpu:%d' % i):
       data.append(tf.get_variable(
           name = 'data%d' % i,
-          shape=[FLAGS.batch_size, slice_size],
+          shape=[slice_size, FLAGS.hidden_size],
           trainable=False))
   # weights
   w = []
   for i in xrange(FLAGS.num_layers):
-    w.append([])
-    for j in xrange(FLAGS.num_gpus):
-      with tf.device('/gpu:%d' % j):
-        with tf.variable_scope('fc%d' % i):
-          w[i].append(tf.get_variable(
-              name='w%d' % j,
-              shape=[slice_size, FLAGS.hidden_size],
-              trainable=True))
+    with tf.device('/gpu:%d' % (i % FLAGS.num_gpus)):
+      with tf.variable_scope('fc%d' % i):
+        w.append(tf.get_variable(
+            name='w',
+            shape=[FLAGS.hidden_size, FLAGS.hidden_size],
+            trainable=True))
   # ff
-  fwd = []
-  last = data
-  for i in xrange(FLAGS.num_layers):
-    with tf.name_scope('fc_ff%d' % i):
-      fwd.append(last)
-      tmp = []
-      for j in xrange(FLAGS.num_gpus):
-        with tf.device('/gpu:%d' % j):
-          # matmult
-          y = tf.matmul(last[j], w[i][j])
-          if FLAGS.num_gpus > 1:
-            # split
-            tmp.append(tf.split(split_dim=1, num_split=FLAGS.num_gpus, value=y))
-          else:
-            tmp.append(y)
-      if FLAGS.num_gpus > 1:
-        # reduce
-        red = []
-        for j in xrange(FLAGS.num_gpus):
-          with tf.device('/gpu:%d' % j):
-            red.append(tf.accumulate_n([s[j] for s in tmp]))
-        last = red
-      else:
-        last = tmp
-  # bp
+  def fwd_bwd(which):
+    fwd = []
+    last = data[which]
+    for i in xrange(FLAGS.num_layers):
+      with tf.name_scope('fc_ff%d' % i):
+        fwd.append(last)
+        # matmult
+        last = tf.matmul(last, w[i])
+    # bp
+    targets = []
+    for i in reversed(xrange(FLAGS.num_layers)):
+      with tf.name_scope('fc_bp%d' % i):
+        # matmult: bp
+        last = tf.matmul(last, tf.transpose(w[i]))
+        # matmult: grad
+        dw = tf.matmul(tf.transpose(fwd[i]), last)
+        # update
+        targets.append(dw)
+    return targets
+
+  tower_grads = []
+  for i in xrange(FLAGS.num_gpus):
+    with tf.device('/gpu:%d' % i), tf.name_scope('tower%d' % i):
+      tower_grads.append(list(reversed(fwd_bwd(i))))
+  # accumulation
   targets = []
-  for i in reversed(xrange(FLAGS.num_layers)):
-    with tf.name_scope('fc_bp%d' % i):
-      # convert col -> rep
-      tmp = []
-      if FLAGS.num_gpus > 1:
-        for j in xrange(FLAGS.num_gpus):
-          with tf.device('/gpu:%d' % j):
-            tmp.append(tf.concat(concat_dim=1, values=last))
-      else:
-        tmp = last
-      last = []
-      for j in xrange(FLAGS.num_gpus):
-        with tf.device('/gpu:%d' % j):
-          # matmult: bp
-          dy = tf.matmul(tmp[j], tf.transpose(w[i][j]))
-          last.append(dy)
-          # matmult: grad
-          dw = tf.matmul(tf.transpose(fwd[i][j]), tmp[j])
-          # update
-          targets.append(dw)
+  for i in xrange(FLAGS.num_layers):
+    with tf.device('/gpu:%d' % (i % FLAGS.num_gpus)):
+      with tf.name_scope('grad_accum%d' % i):
+        targets.append(tf.accumulate_n([t[i] for t in tower_grads]))
   with tf.control_dependencies(targets):
     train_op = tf.no_op()
   init_op = tf.initialize_all_variables()
