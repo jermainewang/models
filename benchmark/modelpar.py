@@ -89,11 +89,13 @@ def get_run_op():
       last = []
       for j in xrange(FLAGS.num_gpus):
         with tf.device('/gpu:%d' % j):
-          # matmult: bp
-          dy = tf.matmul(tmp[j], tf.transpose(w[i][j]))
-          last.append(dy)
-          # matmult: grad
-          dw = tf.matmul(tf.transpose(fwd[i][j]), tmp[j])
+          with tf.name_scope('bp'):
+            # matmult: bp
+            dy = tf.matmul(tmp[j], w[i][j], transpose_b=True)
+            last.append(dy)
+          with tf.name_scope('grad'):
+            # matmult: grad
+            dw = tf.matmul(fwd[i][j], tmp[j], transpose_a=True)
           # update
           targets.append(dw)
   with tf.control_dependencies(targets):
