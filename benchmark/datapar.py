@@ -27,8 +27,6 @@ tf.app.flags.DEFINE_integer('num_layers', 10, """Number of hidden layers""")
 tf.app.flags.DEFINE_bool('enable_trace', False, 'Enable trace')
 
 def get_run_op():
-  # Create an optimizer that performs gradient descent.
-  #opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
   slice_size = FLAGS.batch_size / FLAGS.num_gpus
   print("Slice size: {}".format(slice_size))
   data = []
@@ -112,7 +110,7 @@ def time_tensorflow_run(session, target, info_string):
     if i > num_steps_burn_in:
       if not i % 10:
         print ('%s: step %d, duration = %.3f speed = %.3f images/sec' %
-               (datetime.now(), i - num_steps_burn_in, duration, FLAGS.batch_size / duration))
+               (datetime.now(), i - num_steps_burn_in, duration, FLAGS.batch_size / FLAGS.num_gpus * FLAGS.num_gpus / duration))
       total_duration += duration
       total_duration_squared += duration * duration
   mn = total_duration / FLAGS.num_batches

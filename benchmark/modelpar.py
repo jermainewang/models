@@ -26,17 +26,24 @@ tf.app.flags.DEFINE_integer('num_gpus', 1, """Number of gpus to run.""")
 tf.app.flags.DEFINE_integer('num_layers', 10, """Number of hidden layers""")
 tf.app.flags.DEFINE_bool('enable_trace', False, 'Enable trace')
 
+batch_size = None
+slice_size = None
+feature_size = None
+
 def get_run_op():
-  # Create an optimizer that performs gradient descent.
-  #opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+  global batch_size
+  global slice_size
+  global feature_size
+  batch_size = FLAGS.batch_size
   slice_size = FLAGS.hidden_size / FLAGS.num_gpus
+  feature_size = slice_size * FLAGS.num_gpus
   print("Slice size: {}".format(slice_size))
   data = []
   for i in xrange(FLAGS.num_gpus):
     with tf.device('/gpu:%d' % i):
       data.append(tf.get_variable(
           name = 'data%d' % i,
-          shape=[FLAGS.batch_size, slice_size],
+          shape=[batch_size, slice_size],
           trainable=False))
   # weights
   w = []
@@ -47,7 +54,7 @@ def get_run_op():
         with tf.variable_scope('fc%d' % i):
           w[i].append(tf.get_variable(
               name='w%d' % j,
-              shape=[slice_size, FLAGS.hidden_size],
+              shape=[slice_size,feature_size],
               trainable=True))
   # ff
   fwd = []
@@ -127,7 +134,7 @@ def time_tensorflow_run(session, target, info_string):
     if i > num_steps_burn_in:
       if not i % 10:
         print ('%s: step %d, duration = %.3f speed = %.3f images/sec' %
-               (datetime.now(), i - num_steps_burn_in, duration, FLAGS.batch_size / duration))
+               (datetime.now(), i - num_steps_burn_in, duration, batch_size / duration))
       total_duration += duration
       total_duration_squared += duration * duration
   mn = total_duration / FLAGS.num_batches
