@@ -100,7 +100,11 @@ def get_run_op():
             # matmult: bp
             dy = tf.matmul(tmp[j], w[i][j], transpose_b=True)
             last.append(dy)
-          with tf.name_scope('grad'):
+          if i == 0:
+            dep = [] # no manual scheduling dep since the last bp is not needed
+          else:
+            dep = [dy] # add manual dep for better scheduling decision
+          with tf.control_dependencies(dep), tf.name_scope('grad'):
             # matmult: grad
             dw = tf.matmul(fwd[i][j], tmp[j], transpose_a=True)
           # update

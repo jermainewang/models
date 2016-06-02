@@ -58,12 +58,12 @@ def get_run_op():
     targets = []
     for i in reversed(xrange(FLAGS.num_layers)):
       with tf.name_scope('fc_bp%d' % i):
-        with tf.name_scope('bp'):
-          # matmult: bp
-          last = tf.matmul(last, w[i], transpose_b=True)
         with tf.name_scope('grad'):
           # matmult: grad
           dw = tf.matmul(fwd[i], last, transpose_a=True)
+        with tf.name_scope('bp'):
+          # matmult: bp
+          last = tf.matmul(last, w[i], transpose_b=True)
         # update
         targets.append(dw)
     return targets
