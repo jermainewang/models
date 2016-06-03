@@ -8,16 +8,17 @@ import math
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 from tensorflow.core.protobuf import config_pb2
+
 import mini.models as models
-from run import time_tensorflow_run
+from mini.distributed_helper import setup_servers, NOT_CONTINUE
 
 FLAGS = tf.app.flags.FLAGS
 
-# tf.app.flags.DEFINE_integer('batch_size', 128, """Batch size.""")
-# tf.app.flags.DEFINE_integer('num_batches', 100, """Number of batches to run.""")
-# tf.app.flags.DEFINE_integer('num_gpus', 1, """Number of gpus to run.""")
-# tf.app.flags.DEFINE_integer('num_classes', 1000, """Number of classes""")
-# tf.app.flags.DEFINE_string('model', 'alexnet', """The model to benchmark.""")
+tf.app.flags.DEFINE_integer('batch_size', 128, """Batch size.""")
+tf.app.flags.DEFINE_integer('num_batches', 100, """Number of batches to run.""")
+tf.app.flags.DEFINE_integer('num_gpus', 1, """Number of gpus to run.""")
+tf.app.flags.DEFINE_integer('num_classes', 1000, """Number of classes""")
+tf.app.flags.DEFINE_string('model', 'alexnet', """The model to benchmark.""")
 
 flags = tf.app.flags
 flags.DEFINE_string('log_dir', None, 'Log dir')
@@ -113,66 +114,34 @@ def time_tensorflow_run(session, target, info_string):
          (datetime.now(), info_string, FLAGS.num_batches, mn, sd))
 
 
-def get_cluster_spec(has_ps=True):
-    if has_ps:
-        ps_spec = ['geeker-4:2222']
-        if FLAGS.num_workers == 1:
-            worker_spec = ['geeker-3:2222']
-        elif FLAGS.num_workers == 2:
-            worker_spec = ['geeker-3:2222', 'geeker-3:2223']
-    else:
-        worker_spec = ['geeker-3:2222', 'geeker-4:2222']
-
-    if has_ps:
-        cluster_spec = tf.train.ClusterSpec({'ps': ps_spec,
-                                             'worker': worker_spec})
-    else:
-        cluster_spec = tf.train.ClusterSpec({'worker': worker_spec})
-
-    return cluster_spec
-
-
-def get_device_setter(cluster_spec):
-    return tf.train.replica_device_setter(cluster=cluster_spec)
-
-
 def run_bench(bench_name):
     bench = importlib.import_module(models.__name__ + '.' + bench_name)
     assert bench is not None
 
     # create session
-    args = []
     if FLAGS.distributed_mode == 1:
-        cluster_spec = get_cluster_spec(has_ps=False)
-        server = tf.train.Server(cluster_spec,
-                                 job_name=FLAGS.node_name,
-                                 task_index=FLAGS.worker_index)
-        args.append(FLAGS.worker_argc_url)
-        if FLAGS.worker_index != 0:
-            server.join()
-            return 0
-            sess = tf.Session(*args)
-        # devices = ["/job:worker/task:%d" % i for i in range(FLAGS.num_workers)]
-
-    # ops 
-    train_op = bench.get_run_op()
-    # g = tf.get_default_graph()
-    # if not isinstance(train_op, (list, tuple)):
-        # train_op = [train_op]
-    # with g.control_dependencies(train_op):
-        # final = tf.no_op()
-    # train_op = final
-    init_op = tf.initialize_all_variables()
-    sess = tf.Session(*args)
-
-    # init variables
-    print('Initialize Variables ', time.time())
-    sess.run(init_op)
-    print('Initialize Done ', time.time())
+        if setup_servers() == NOT_CONTINUE:
+            sys.exit()
+        sess, train_op = bench.get_run_op()
+    else:
+        sess = tf.Session()
+        # ops
+        train_op = bench.get_run_op()
+        '''
+        g = tf.get_default_graph()
+        if not isinstance(train_op, (list, tuple)):
+            train_op = [train_op]
+        with g.control_dependencies(train_op):
+            final = tf.no_op()
+         train_op = final
+        '''
+        init_op = tf.initialize_all_variables()
+        # init variables
+        sess.run(init_op)
 
     # run
-    info = 'Training %s+%d+%d+%d+%d' % (bench_name, FLAGS.num_workers, 
-                                        FLAGS.gpu_aggr, FLAGS.weight_size, 
+    info = 'Training %s+%d+%d+%d+%d' % (bench_name, FLAGS.num_workers,
+                                        FLAGS.gpu_aggr, FLAGS.weight_size,
                                         FLAGS.batch_size)
     time_tensorflow_run(sess, train_op, info)
 
