@@ -18,6 +18,10 @@ tf.app.flags.DEFINE_integer('num_batches', 100, """Number of batches to run.""")
 tf.app.flags.DEFINE_integer('num_gpus', 1, """Number of gpus to run.""")
 tf.app.flags.DEFINE_integer('num_classes', 1000, """Number of classes""")
 tf.app.flags.DEFINE_string('model', 'alexnet', """The model to benchmark.""")
+tf.app.flags.DEFINE_bool('only_forward', False, """Only compute loss value.""")
+tf.app.flags.DEFINE_integer('num_layers', 5, """Number of hidden layers""")
+tf.app.flags.DEFINE_integer('layer_size', 4096, """Hidden layer size""")
+
 
 # some constants
 TOWER_NAME = 'MODEL_TOWER'
@@ -80,6 +84,7 @@ def get_run_op(bench):
   with tf.device(var_device):
     # Create an optimizer that performs gradient descent.
     opt = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+    targets = []
     # calculate the gradients for each model tower
     tower_grads = []
     for i in xrange(FLAGS.num_gpus):
@@ -91,18 +96,22 @@ def get_run_op(bench):
             loss = _tower_loss(bench, images_batch, labels_batch, FLAGS.num_classes, scope)
           # Reuse variables for next tower
           tf.get_variable_scope().reuse_variables()
-          # calculate gradients
-          grads = opt.compute_gradients(loss)
-          # keep it
-          tower_grads.append(grads)
-    # average gradients
-    grads = _average_gradients(tower_grads)
-    # apply (update)
-    apply_gradient_op = opt.apply_gradients(grads)
-    train_op = tf.group(apply_gradient_op)
+          if not FLAGS.only_forward:
+            # calculate gradients
+            grads = opt.compute_gradients(loss)
+            # keep it
+            tower_grads.append(grads)
+          else:
+            targets.append(loss)
+    if not FLAGS.only_forward:
+      # average gradients
+      grads = _average_gradients(tower_grads)
+      # apply (update)
+      apply_gradient_op = opt.apply_gradients(grads)
+      targets.append(apply_gradient_op)
+    train_op = tf.group(*tuple(targets))
     # Build initialization operation
     init_op = tf.initialize_all_variables()
-
     return init_op, train_op
 
 def run_bench(bench_name):

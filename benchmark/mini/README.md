@@ -1,6 +1,6 @@
 ## Mini-benchmark for Tensorflow
 
-### Usage:
+### Usage of the benchmark:
 python run_mini.py --num_workers=WORKER_COUNT --level=LEVEL_COUNT --mode=MODEL_NAME --weight_size=WEIGHT_SIZE --batch_size=BATCH_SIZE --num_batch=LOOP_COUNT
 
 ### Mode list:
@@ -16,7 +16,7 @@ python run_mini.py --num_workers=WORKER_COUNT --level=LEVEL_COUNT --mode=MODEL_N
 10. A model to simulate physics usage.  (MODEL_NAME = fc_phy, --phy_blocks=2(or more) --shared_ratio=0.8 (depend on the usage))
 
 ## Log (Tensorboard):
-### Usage
+### Usage of the benchmark
 1. Add these two parameters : --full_trace=1 --log_dir="YourCustomizedDirectory"
 2. After execution, change to the tensorflow directory.
 3. python tensorflow/tensorboard/tensorboard.py  --logdir="YourCustomizedDirectory"
@@ -31,7 +31,7 @@ test_writer = tf.train.SummaryWriter(FLAGS.log_dir + '/test')
 ```
 
 ## Trace
-### Usage
+### Usage of the benchmark
 1. Add the parameter : --full_trace=1
 2. After execution, there will be a trace file, full_trace.ctf, in the execution directory.
 3. Download full_trace.ctf to your personal computer.
