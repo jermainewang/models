@@ -61,14 +61,15 @@ def ff_bp(data, w, grads, ff_deps, bp_deps):
     with tf.name_scope('fc_ff%d' % i):
       fwd.append(last)
       tmp = []
+      new_ff_deps.append([])
       for j in xrange(FLAGS.num_gpus):
-        with tf.device('/gpu:%d' % j), tf.control_dependencies(ff_deps[i]):
+        with tf.device('/gpu:%d' % j), tf.control_dependencies([ff_deps[i][j]]):
           # matmult
           y = tf.matmul(last[j], w[i][j])
           # split
           y_split = tf.split(split_dim=1, num_split=FLAGS.num_gpus, value=y)
           tmp.append(y_split)
-          new_ff_deps.append([y])
+          new_ff_deps[i].append(y)
       # reduce
       red = []
       for j in xrange(FLAGS.num_gpus):
@@ -93,7 +94,7 @@ def ff_bp(data, w, grads, ff_deps, bp_deps):
             # matmult: grad
             dw = tf.matmul(fwd[i][j], tmp[j], transpose_a=True)
           # update
-          grads[i] += dw
+          grads[i][j] += dw
   return new_ff_deps, new_bp_deps
 
 def time_tensorflow_run(session, target, info_string):
@@ -138,8 +139,8 @@ def main(_):
 
   # create graph
   weights, grads = make_weights(weight_shape)
-  ff_deps = [[tf.no_op()] for i in range(FLAGS.num_layers)]
-  bp_deps = [[tf.no_op()] for i in range(FLAGS.num_layers)]
+  ff_deps = [[tf.no_op() for j in range(FLAGS.num_gpus)] for i in range(FLAGS.num_layers)]
+  bp_deps = [[tf.no_op() for j in range(FLAGS.num_gpus)] for i in range(FLAGS.num_layers)]
   for i in range(FLAGS.num_cuts):
     with tf.name_scope('data_cut%d' % i):
       data = make_data(FLAGS.batch_size / FLAGS.num_cuts, slice_size)
@@ -155,7 +156,8 @@ def main(_):
   # run
   merged = tf.merge_all_summaries()
   writer = tf.train.SummaryWriter(log_dir, sess.graph)
-  with tf.control_dependencies(grads):
+  grads_flatten = sum(grads, [])
+  with tf.control_dependencies(grads_flatten):
     train_op = tf.no_op()
   time_tensorflow_run(sess, train_op, 'Training')
 
